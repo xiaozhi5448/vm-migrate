@@ -4,9 +4,9 @@ import logging
 from software_sources import *
 logging.basicConfig(level=logging.INFO)
 
-username = 'xiaozhi'
+username = 'ubuntu'
 pkgmgr = ''
-password = 'wodemima'
+password = 'mypasswd321ASD'
 connection_args = {
     'password': password
 }
@@ -16,8 +16,11 @@ system_name = ''
 version = ''
 version_name = ''
 
-proxy_host = '192.168.56.1'
-proxy_port = '1088'
+ssr_subscribe = 'https://dingyue.suying666.info/link/QHLGhgW9xvLv9n0p?sub=1'
+npm_source = 'https: // registry.npm.taobao.org'
+
+proxy_host = '127.0.0.1'
+proxy_port = '1080'
 
 
 @task
@@ -28,6 +31,7 @@ def sudo_without_pass(c):
     c.run("sudo chmod -w /etc/sudoers", pty=True)
 
 
+@task
 def get_pkg(c):
     global pkgmgr
     try:
@@ -38,6 +42,7 @@ def get_pkg(c):
         pkgmgr = 'apt'
 
 
+@task
 def get_banner(c):
     global system_name, version, version_name
     res = c.run(
@@ -53,6 +58,7 @@ def get_banner(c):
         version_name = res.stdout.strip()
 
 
+@task
 def change_software_source(c):
     if system_name == 'kali':
         try:
@@ -70,7 +76,7 @@ def change_software_source(c):
             pass
         finally:
             c.run(
-                'echo -e "{}" | sudo tee /etc/apt/sources.list'.format(ubuntu_source.format(version_name)))
+                'echo -e "{}" | sudo tee /etc/apt/sources.list'.format(ubuntu_source.format(release_name=version_name)))
 
     elif system_name == 'centos':
         try:
@@ -87,6 +93,7 @@ def change_software_source(c):
     c.run("sudo {} update -y".format(pkgmgr))
 
 
+@task
 def install_deps(c):
     if system_name in ['kali', 'ubuntu']:
         c.run("""sudo {} install -y gcc make build-essential libssl-dev zlib1g-dev \
@@ -99,6 +106,27 @@ def install_deps(c):
                gcc gcc-c++ make cmake git kernel-devel'''.format(pkgmgr))
 
 
+@task
+def config_ssr(c):
+    c.run("sudo {} install -y npm".format(pkgmgr))
+    # c.run("npm config set registry {}".format(npm_source))
+    try:
+        c.run(
+            "git clone -b manyuser https://github.com/shadowsocksr-backup/shadowsocksr.git")
+    except Exception as e:
+        pass
+    # c.run("sudo npm install -g ssr-helper")
+    c.run("ssr config {}/shadowsocksr".format("/home/ubuntu"))
+    c.run("ssr-subscribe add {}".format(ssr_subscribe))
+    c.run("ssr-subscribe update", pty=True)
+    try:
+
+        c.run("sudo ssr connect", pty=True)
+    except Exception as e:
+        pass
+
+
+@task
 def install_proxychains(c):
     if system_name in ['ubuntu', 'kali']:
         c.run("sudo {} install {} -y".format(pkgmgr, "proxychains"))
@@ -109,13 +137,14 @@ def install_proxychains(c):
         pass
 
 
+@task
 def install_pyenv(c):
     try:
-        c.run("test -d /home/{}/.pyenvd".format(username))
+        c.run("test -d /home/{}/.pyenv".format(username))
     except:
         c.run("proxychains curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer > /home/{}/pyenv-installer.sh".format(username))
-        c.run("sed -i '/^ProxyChains.*/d' /home/{}/pyenv-installer.sh".format(username))
-        c.run("proxychains sh /home/{}/pyenv-installer.sh".format(username))
+        c.run("sed -i '/^ProxyChains.*/d' /home/{}/pyenv-installer.sh".format(username), pty=True)
+        c.run("proxychains sh /home/{}/pyenv-installer.sh".format(username), pty=True)
 
         c.run('''cat << EOF  >> /home/{}/.bashrc
         export PATH="/home/{}/.pyenv/bin:\$PATH"
@@ -124,21 +153,24 @@ def install_pyenv(c):
                       '''.format(username, username))
         c.run("source /home/{}/.bashrc".format(username))
     try:
+
         c.run("mkdir -p /home/{}/.pyenv/cache".format(username))
     except:
         logging.info("cache dir already exists!")
         pass
-    c.put('Miniconda3-3.8.3-Linux-x86_64.sh',
-          '/home/{}/.pyenv/cache/'.format(username))
+    c.run("source /home/{}/.bashrc".format(username))
+    # c.put('archive/Miniconda3-3.8.3-Linux-x86_64.sh',
+    #       '/home/{}/.pyenv/cache/'.format(username))
+    c.put('config/.condarc', '/home/{}/'.format(username))
     c.run("pyenv install miniconda3-3.8.3")
     c.run("sudo apt install python-pip -y")
-    c.run('sudo pip install -U pip  -i https://pypi.tuna.tsinghua.edu.cn/simple some-package')
+    c.run('sudo pip install -U pip  -i https://pypi.tuna.tsinghua.edu.cn/simple')
     c.run('pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple')
     c.run('sudo pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple')
-    c.put('.condarc', '/home/{}/'.format(username))
     c.run('sudo cp /home/{}/.condarc /root/'.format(username))
 
 
+@task
 def install_java(c):
     try:
         res = c.run('test -d /usr/local/java/jdk')
@@ -146,8 +178,9 @@ def install_java(c):
         return
     except:
         pass
-    c.put('jdk-8u261-linux-x64.tar.gz', '/home/{}/'.format(username))
-    c.put('jdk-14.0.2_linux-x64_bin.tar.gz', '/home/{}/'.format(username))
+    c.put('archive/jdk-8u261-linux-x64.tar.gz', '/home/{}/'.format(username))
+    c.put('archive/jdk-14.0.2_linux-x64_bin.tar.gz',
+          '/home/{}/'.format(username))
     c.run('sudo mkdir -p /usr/local/java')
     c.run('sudo mv /home/{}/jdk-8u261-linux-x64.tar.gz /home/{}/jdk-14.0.2_linux-x64_bin.tar.gz /usr/local/java/'.format(username, username))
     c.run('sudo tar -xf /usr/local/java/jdk-8u261-linux-x64.tar.gz -C /usr/local/java/')
@@ -155,12 +188,13 @@ def install_java(c):
     logging.info("jdk archive uncompressed!")
     c.run('sudo ln -s /usr/local/java/jdk-14.0.2 /usr/local/java/jdk')
     c.run('''
-          cat << EOF >> ~/.bashrc
-          export JAVA_HOME="/usr/local/java/jdk"
-          export PATH="/usr/local/java/jdk/bin:\$PATH"
+cat << EOF >> ~/.bashrc
+export JAVA_HOME="/usr/local/java/jdk"
+export PATH="/usr/local/java/jdk/bin:\$PATH"
           ''')
 
 
+@task
 def install_docker(c):
     c.run('sudo apt install docker.io docker-compose -y')
     c.run('sudo mkdir -p /etc/docker')
@@ -179,15 +213,17 @@ def install_vim(c):
 
 
 if __name__ == '__main__':
-    c = Connection('192.168.56.104', config=config)
+    c = Connection('49.232.212.180', config=config)
     get_pkg(c)
-    # logging.info('find package manager:{}'.format(pkgmgr))
+    logging.info('find package manager:{}'.format(pkgmgr))
     get_banner(c)
-    # logging.info('find system: {}, version: {}'.format(system_name, version))
+    # sudo_without_pass(c)
+    logging.info('find system: {}, version: {}'.format(system_name, version))
     # change_software_source(c)
     # install_deps(c)
-    # install_proxychains(c)
-    # install_pyenv(c)
+    # config_ssr(c)
+    install_proxychains(c)
+    install_pyenv(c)
     install_java(c)
-    # install_docker(c)
+    install_docker(c)
     c.close()
