@@ -3,7 +3,7 @@ import getpass
 import logging
 from software_sources import *
 logging.basicConfig(level=logging.INFO)
-
+remote_server = '49.232.212.180'
 username = 'ubuntu'
 pkgmgr = ''
 password = 'mypasswd321ASD'
@@ -124,6 +124,7 @@ def config_ssr(c):
         c.run("sudo ssr connect", pty=True)
     except Exception as e:
         pass
+    c.run("sudo apt install privoxy -y")
 
 
 @task
@@ -162,11 +163,12 @@ def install_pyenv(c):
     # c.put('archive/Miniconda3-3.8.3-Linux-x86_64.sh',
     #       '/home/{}/.pyenv/cache/'.format(username))
     c.put('config/.condarc', '/home/{}/'.format(username))
-    c.run("pyenv install miniconda3-3.8.3")
+
     c.run("sudo apt install python-pip -y")
     c.run('sudo pip install -U pip  -i https://pypi.tuna.tsinghua.edu.cn/simple')
     c.run('pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple')
     c.run('sudo pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple')
+    c.run("pyenv install miniconda3-3.8.3", pty=True)
     c.run('sudo cp /home/{}/.condarc /root/'.format(username))
 
 
@@ -204,6 +206,7 @@ def install_docker(c):
 }
 EOF
           ''')
+    c.run("sudo usermod -aG docker {}".format(username))
     c.run('sudo systemctl daemon-reload')
     c.run('sudo systemctl restart docker')
 
@@ -212,8 +215,18 @@ def install_vim(c):
     pass
 
 
+def config_secure_tools(c):
+    c.run("sudo apt install apt-file -y && sudo apt-file update ")
+    c.run("sudo apt install dirb nmap -y")
+    c.run("proxychains curl https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > msfinstall")
+    c.run("sed -i '/^ProxyChains.*/d' /home/{}/msfinstall".format(username), pty=True)
+    c.run("chmod +x /home/{}/msfinstall".format(username))
+    c.run("/home/{}/msfinstall".format(username))
+    pass
+
+
 if __name__ == '__main__':
-    c = Connection('49.232.212.180', config=config)
+    c = Connection(remote_server, config=config)
     get_pkg(c)
     logging.info('find package manager:{}'.format(pkgmgr))
     get_banner(c)
@@ -223,7 +236,7 @@ if __name__ == '__main__':
     # install_deps(c)
     # config_ssr(c)
     install_proxychains(c)
-    install_pyenv(c)
+    # install_pyenv(c)
     install_java(c)
     install_docker(c)
     c.close()
