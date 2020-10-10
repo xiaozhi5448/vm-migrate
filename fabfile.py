@@ -1,11 +1,13 @@
+import sys
 from fabric import Connection, task, Config
 import getpass
 import logging
 from software_sources import *
+from termcolor import colored, cprint
 logging.basicConfig(level=logging.INFO)
 remote_server = '49.232.212.180'
 username = 'ubuntu'
-pkgmgr = ''
+pkgmgr = 'apt'
 password = 'mypasswd321ASD'
 connection_args = {
     'password': password
@@ -24,15 +26,18 @@ proxy_port = '1080'
 
 
 @task
-def sudo_without_pass(c):
+def sudo_without_pass(c, username=username):
+    logging.info("config sudo without password!")
     c.run("sudo chmod +w /etc/sudoers", pty=True)
     c.run("sudo sed -i '/^root/a\{} ALL=(ALL:ALL) NOPASSWD:ALL\n' /etc/sudoers".format(username), pty=True)
     c.run("sudo sed -i '/^\%sudo/a\%{} ALL=(ALL:ALL) NOPASSWD:ALL\n' /etc/sudoers".format(username), pty=True)
     c.run("sudo chmod -w /etc/sudoers", pty=True)
+    logging.info("config sudo done!")
 
 
 @task
 def get_pkg(c):
+    logging.info("finding package manager...")
     global pkgmgr
     try:
         res = c.run("which yum")
@@ -40,11 +45,13 @@ def get_pkg(c):
 
     except Exception as e:
         pkgmgr = 'apt'
+    logging.info("package mgr: {}".format(pkgmgr))
 
 
 @task
 def get_banner(c):
     global system_name, version, version_name
+    logging.info("check system banner...")
     res = c.run(
         '''cat /etc/os-release | egrep "^ID=" | awk -F= '{print $2}' ''')
     system_name = res.stdout.strip()
@@ -56,10 +63,12 @@ def get_banner(c):
                     cat /etc/os-release | grep "VERSION_CODENAME" | awk -F= '{print $2}'
                     ''')
         version_name = res.stdout.strip()
+    logging.info("find system {}; version: {};".format(system_name, version))
 
 
 @task
-def change_software_source(c):
+def change_software_source(c, system_name=system_name, pkgmgr=pkgmgr):
+    logging.info("changing software source...")
     if system_name == 'kali':
         try:
             res = c.run('test -f /etc/apt/sources.list')
@@ -94,7 +103,8 @@ def change_software_source(c):
 
 
 @task
-def install_deps(c):
+def install_deps(c, system_name=system_name, pkgmgr=pkgmgr):
+    logging.info("installing dependencies...")
     if system_name in ['kali', 'ubuntu']:
         c.run("""sudo {} install -y gcc make build-essential libssl-dev zlib1g-dev \
                 libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
@@ -107,28 +117,33 @@ def install_deps(c):
 
 
 @task
-def config_ssr(c):
+def config_ssr(c, pkgmgr=pkgmgr, username=username):
+    logging.info("config ssr client")
     c.run("sudo {} install -y npm".format(pkgmgr))
     # c.run("npm config set registry {}".format(npm_source))
     try:
         c.run(
             "git clone -b manyuser https://github.com/shadowsocksr-backup/shadowsocksr.git")
     except Exception as e:
+        cprint("clone ssr failed or dest directory already exists!", "red")
         pass
-    # c.run("sudo npm install -g ssr-helper")
-    c.run("ssr config {}/shadowsocksr".format("/home/ubuntu"))
+    c.run("sudo npm install -g ssr-helper")
+    c.run("ssr config /home/{}/shadowsocksr".format(username))
     c.run("ssr-subscribe add {}".format(ssr_subscribe))
     c.run("ssr-subscribe update", pty=True)
     try:
 
         c.run("sudo ssr connect", pty=True)
     except Exception as e:
-        pass
+        cprint("connect ssr failed!\n", "red")
+    logging.info("config privoxy!")
     c.run("sudo apt install privoxy -y")
+    c.run("sudo sed -i 'N;1337aforward-socks5t / 127.0.0.1:1080 ./' /etc/privoxy/config")
 
 
 @task
-def install_proxychains(c):
+def install_proxychains(c, system_name=system_name, pkgmgr=pkgmgr):
+    logging.info("installing proxychains...")
     if system_name in ['ubuntu', 'kali']:
         c.run("sudo {} install {} -y".format(pkgmgr, "proxychains"))
         c.run('''
@@ -140,6 +155,7 @@ def install_proxychains(c):
 
 @task
 def install_pyenv(c):
+    logging.info("installing pyenv...")
     try:
         c.run("test -d /home/{}/.pyenv".format(username))
     except:
@@ -148,10 +164,10 @@ def install_pyenv(c):
         c.run("proxychains sh /home/{}/pyenv-installer.sh".format(username), pty=True)
 
         c.run('''cat << EOF  >> /home/{}/.bashrc
-        export PATH="/home/{}/.pyenv/bin:\$PATH"
-        eval "\$(pyenv init -)"
-        eval "\$(pyenv virtualenv-init -)"
-                      '''.format(username, username))
+export PATH="/home/{}/.pyenv/bin:\$PATH"
+eval "\$(pyenv init -)"
+eval "\$(pyenv virtualenv-init -)"
+'''.format(username, username))
         c.run("source /home/{}/.bashrc".format(username))
     try:
 
