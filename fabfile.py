@@ -4,11 +4,13 @@ import getpass
 import logging
 from software_sources import *
 from termcolor import colored, cprint
+from fabric import env
+env.warn_only = True
 logging.basicConfig(level=logging.INFO)
-remote_server = '49.232.212.180'
-username = 'ubuntu'
+remote_server = '127.0.0.1'
+username = 'xiaozhi'
 pkgmgr = 'apt'
-password = 'mypasswd321ASD'
+password = 'wodemima'
 connection_args = {
     'password': password
 }
@@ -22,7 +24,7 @@ ssr_subscribe = 'https://dingyue.suying666.info/link/QHLGhgW9xvLv9n0p?sub=1'
 npm_source = 'https: // registry.npm.taobao.org'
 
 proxy_host = '127.0.0.1'
-proxy_port = '1080'
+proxy_port = '1088'
 
 
 @task
@@ -43,7 +45,7 @@ def get_pkg(c):
         res = c.run("which yum")
         pkgmgr = 'yum'
 
-    except Exception as e:
+    except SystemExit:
         pkgmgr = 'apt'
     logging.info("package mgr: {}".format(pkgmgr))
 
@@ -105,7 +107,7 @@ def change_software_source(c, system_name=system_name, pkgmgr=pkgmgr):
 @task
 def install_deps(c, system_name=system_name, pkgmgr=pkgmgr):
     logging.info("installing dependencies...")
-    if system_name in ['kali', 'ubuntu']:
+    if system_name in ['kali', 'ubuntu', 'Deepin']:
         c.run("""sudo {} install -y gcc make build-essential libssl-dev zlib1g-dev \
                 libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
                 libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev\
@@ -144,7 +146,7 @@ def config_ssr(c, pkgmgr=pkgmgr, username=username):
 @task
 def install_proxychains(c, system_name=system_name, pkgmgr=pkgmgr):
     logging.info("installing proxychains...")
-    if system_name in ['ubuntu', 'kali']:
+    if system_name in ['ubuntu', 'kali', 'Deepin']:
         c.run("sudo {} install {} -y".format(pkgmgr, "proxychains"))
         c.run('''
               sudo sed -i 's/^socks4.*/socks5 {} {}/g' /etc/proxychains.conf
@@ -246,13 +248,14 @@ if __name__ == '__main__':
     get_pkg(c)
     logging.info('find package manager:{}'.format(pkgmgr))
     get_banner(c)
-    # sudo_without_pass(c)
+    sudo_without_pass(c)
     logging.info('find system: {}, version: {}'.format(system_name, version))
     # change_software_source(c)
-    # install_deps(c)
+    install_deps(c, system_name=system_name)
     # config_ssr(c)
     install_proxychains(c)
     # install_pyenv(c)
-    install_java(c)
-    install_docker(c)
+    # install_java(c)
+    # install_docker(c)
+    config_secure_tools(c)
     c.close()
